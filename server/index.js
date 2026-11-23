@@ -6,6 +6,8 @@ import dns from 'dns';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
+import attendanceRoutes from './routes/attendance.js';
+import ingestRoutes from './routes/ingest.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,6 +21,8 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/ingest', ingestRoutes);
 
 // MongoDB connection helper
 export const connectDB = async () => {
@@ -59,8 +63,19 @@ app.get('/api/health', (req, res) => {
 // Start server
 if (process.env.NODE_ENV !== 'test') {
   connectDB();
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
+  });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n❌ Port ${PORT} is already in use by another process.`);
+      console.error(`   To kill the existing process on Windows, run:`);
+      console.error(`   npx kill-port ${PORT}`);
+      console.error(`   Or change PORT=5001 in server/.env\n`);
+    } else {
+      console.error(`❌ Server startup error: ${err.message}`);
+    }
   });
 }
 

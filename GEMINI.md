@@ -4,6 +4,7 @@
 - **Frontend (`client/`):** React (Vite), JavaScript, Tailwind CSS.
 - **Backend (`server/`):** Node.js, Express.js, MongoDB + Mongoose.
 - **AI:** Google Gemini API (`@google/genai` SDK) — server-side only.
+- **Gemini Model:** Always use gemini-3.8-flash with @google/genai.
 - **Auth:** JWT + bcrypt.
 
 ## Strict Architectural Guardrails

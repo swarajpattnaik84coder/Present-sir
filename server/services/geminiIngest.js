@@ -16,9 +16,38 @@ const getGeminiClient = () => {
 };
 
 /**
+ * Executes a Gemini API call with up to `maxRetries` (default: 5) and exponential backoff.
+ *
+ * @param {Function} apiCall - Async function returning generateContent promise
+ * @param {number} [maxRetries=5] - Number of total attempts before failing
+ * @param {number} [initialDelayMs=1000] - Base delay in milliseconds
+ * @returns {Promise<any>}
+ */
+async function callGeminiWithRetry(apiCall, maxRetries = 5, initialDelayMs = 1000) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await apiCall();
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        const delay = initialDelayMs * Math.pow(2, attempt - 1) + Math.random() * 500;
+        console.warn(
+          `⚠️ Gemini API call failed (attempt ${attempt}/${maxRetries}): ${err.message}. Retrying in ${Math.round(delay)}ms...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else {
+        console.error(`❌ Gemini API call failed after ${maxRetries} attempts:`, err.message);
+      }
+    }
+  }
+  throw lastError;
+}
+
+/**
  * Extracts subjects and recurring timetable slots from one or more image/PDF buffers.
  * Passes all files together in a single Gemini call and instructs the model to merge
- * and deduplicate entries.
+ * and deduplicate entries. Retries up to 5 times on transient failures.
  *
  * @param {Array<{ buffer: Buffer, mimetype?: string, mimeType?: string }>|Buffer} files
  * @param {string} [legacyMimeType] - Fallback mimeType if single buffer passed
@@ -54,45 +83,47 @@ Rules:
 5. For each timetable slot, map subjectCode back to the subject's code. If no code exists, use the subject name as the identifier.
 6. Return ONLY a valid JSON object matching the requested schema.`;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3.8-flash',
-    contents: [...inlineParts, prompt],
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'OBJECT',
-        properties: {
-          subjects: {
-            type: 'ARRAY',
-            items: {
-              type: 'OBJECT',
-              properties: {
-                name: { type: 'STRING' },
-                code: { type: 'STRING' },
-                faculty: { type: 'STRING' },
+  const response = await callGeminiWithRetry(() =>
+    ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: [...inlineParts, prompt],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            subjects: {
+              type: 'ARRAY',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  name: { type: 'STRING' },
+                  code: { type: 'STRING' },
+                  faculty: { type: 'STRING' },
+                },
+                required: ['name', 'code'],
               },
-              required: ['name', 'code'],
+            },
+            timetableSlots: {
+              type: 'ARRAY',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  subjectCode: { type: 'STRING' },
+                  dayOfWeek: { type: 'INTEGER' },
+                  startTime: { type: 'STRING' },
+                  endTime: { type: 'STRING' },
+                  room: { type: 'STRING' },
+                },
+                required: ['subjectCode', 'dayOfWeek', 'startTime'],
+              },
             },
           },
-          timetableSlots: {
-            type: 'ARRAY',
-            items: {
-              type: 'OBJECT',
-              properties: {
-                subjectCode: { type: 'STRING' },
-                dayOfWeek: { type: 'INTEGER' },
-                startTime: { type: 'STRING' },
-                endTime: { type: 'STRING' },
-                room: { type: 'STRING' },
-              },
-              required: ['subjectCode', 'dayOfWeek', 'startTime'],
-            },
-          },
+          required: ['subjects', 'timetableSlots'],
         },
-        required: ['subjects', 'timetableSlots'],
       },
-    },
-  });
+    })
+  );
 
   const rawText = response.text;
   try {
@@ -109,6 +140,7 @@ export const parseTimetableFile = parseTimetableFiles;
 /**
  * Extracts official holidays from one or more calendar/holiday documents.
  * Merges and deduplicates holiday dates across all uploaded files.
+ * Retries up to 5 times on transient failures.
  *
  * @param {Array<{ buffer: Buffer, mimetype?: string, mimeType?: string }>|Buffer} files
  * @param {string} [legacyMimeType] - Fallback mimeType if single buffer passed
@@ -142,30 +174,32 @@ Rules:
 3. Name must be the name or description of the holiday/observance.
 4. Return ONLY a valid JSON object matching the requested schema.`;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3.8-flash',
-    contents: [...inlineParts, prompt],
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'OBJECT',
-        properties: {
-          holidays: {
-            type: 'ARRAY',
-            items: {
-              type: 'OBJECT',
-              properties: {
-                name: { type: 'STRING' },
-                date: { type: 'STRING' },
+  const response = await callGeminiWithRetry(() =>
+    ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: [...inlineParts, prompt],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            holidays: {
+              type: 'ARRAY',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  name: { type: 'STRING' },
+                  date: { type: 'STRING' },
+                },
+                required: ['name', 'date'],
               },
-              required: ['name', 'date'],
             },
           },
+          required: ['holidays'],
         },
-        required: ['holidays'],
       },
-    },
-  });
+    })
+  );
 
   const rawText = response.text;
   try {

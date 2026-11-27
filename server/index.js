@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import attendanceRoutes from './routes/attendance.js';
 import ingestRoutes from './routes/ingest.js';
+import agentsRoutes from './routes/agents.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,6 +24,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/ingest', ingestRoutes);
+app.use('/api/agents', agentsRoutes);
 
 // MongoDB connection helper
 export const connectDB = async () => {

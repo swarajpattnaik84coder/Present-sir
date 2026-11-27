@@ -35,9 +35,9 @@ async function callGeminiWithRetry(fn, maxRetries = 5) {
 
       if (isRetryable && attempt < maxRetries) {
         console.warn(
-          `⚠️ Gemini API returned 503/UNAVAILABLE. Retrying in 1s (retry ${attempt + 1}/${maxRetries})...`
+          `⚠️ Gemini API returned 503/UNAVAILABLE. Retrying in 2s (retry ${attempt + 1}/${maxRetries})...`
         );
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
         continue;
       }
 

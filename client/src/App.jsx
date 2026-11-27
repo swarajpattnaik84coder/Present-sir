@@ -1,124 +1,93 @@
-import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Loader2, Construction } from 'lucide-react';
+import { AuthProvider, useAuth } from './context/AuthContext.jsx';
+import Layout from './components/Layout.jsx';
+import Login from './pages/Login.jsx';
+import Register from './pages/Register.jsx';
+import Dashboard from './pages/Dashboard.jsx';
+import Today from './pages/Today.jsx';
 
-function App() {
-  const [health, setHealth] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
 
-  const checkHealth = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/health');
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-      const data = await res.json();
-      setHealth(data);
-    } catch (err) {
-      setError(err.message || 'Failed to connect to backend');
-      setHealth(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0B0C10] text-white flex flex-col items-center justify-center gap-3">
+        <Loader2 className="w-7 h-7 text-[#1E6BFF] animate-spin" />
+        <p className="text-xs text-[#9CA3AF]">Verifying session...</p>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    checkHealth();
-  }, []);
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
+  return children;
+}
+
+function PlaceholderPage({ title, description }) {
   return (
-    <div className="min-h-screen bg-[#0B0C10] text-white flex flex-col items-center justify-center p-6 select-none">
-      {/* Background glow effect */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-[#1E6BFF]/10 blur-[120px] rounded-full" />
+    <div className="bg-[#121418] border border-[#1F242D] rounded-2xl p-10 text-center space-y-3 max-w-xl mx-auto mt-8">
+      <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-[#1E6BFF]/10 border border-[#1E6BFF]/30 text-[#1E6BFF]">
+        <Construction className="w-6 h-6" />
       </div>
-
-      <div className="relative z-10 w-full max-w-xl flex flex-col items-center text-center space-y-8">
-        {/* Brand Header */}
-        <div className="space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-[#121418] text-xs font-medium text-[#9CA3AF] tracking-wide uppercase">
-            <span className="w-2 h-2 rounded-full bg-[#1E6BFF] animate-pulse" />
-            AI Attendance Co-Pilot
-          </div>
-          <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-white">
-            Present <span className="text-[#1E6BFF]">Sir</span>
-          </h1>
-          <p className="text-sm sm:text-base text-[#9CA3AF] max-w-md mx-auto">
-            Deterministic attendance intelligence, real-time timetable tracking, and strategic bunk optimization.
-          </p>
-        </div>
-
-        {/* Backend Health Status Card */}
-        <div className="w-full bg-[#121418] border border-white/10 rounded-2xl p-6 shadow-2xl backdrop-blur-sm text-left">
-          <div className="flex items-center justify-between pb-4 border-b border-white/5">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold tracking-wider text-[#9CA3AF] uppercase">
-                System Diagnostics
-              </span>
-            </div>
-            <button
-              onClick={checkHealth}
-              disabled={loading}
-              className="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white transition disabled:opacity-50"
-            >
-              {loading ? 'Checking...' : 'Refresh'}
-            </button>
-          </div>
-
-          <div className="mt-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#9CA3AF]">Backend API (`/api/health`)</span>
-              {loading ? (
-                <span className="inline-flex items-center gap-1.5 text-xs text-[#9CA3AF]">
-                  <span className="w-2 h-2 rounded-full bg-[#9CA3AF] animate-ping" />
-                  Connecting...
-                </span>
-              ) : error ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#EAB308]">
-                  <span className="w-2 h-2 rounded-full bg-[#EAB308]" />
-                  Offline
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1E6BFF]">
-                  <span className="w-2 h-2 rounded-full bg-[#1E6BFF]" />
-                  Connected ({health?.status})
-                </span>
-              )}
-            </div>
-
-            {health && (
-              <div className="rounded-xl bg-[#0B0C10] p-4 border border-white/5 font-mono text-xs text-[#9CA3AF] space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-white/60">Status:</span>
-                  <span className="text-[#1E6BFF] font-semibold">{health.status}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/60">Server Time:</span>
-                  <span className="text-white">{health.timestamp}</span>
-                </div>
-              </div>
-            )}
-
-            {error && (
-              <div className="rounded-xl bg-[#EAB308]/10 border border-[#EAB308]/20 p-4 text-xs text-[#EAB308]">
-                <p className="font-semibold mb-1">Connection Alert</p>
-                <p className="text-[#EAB308]/80">{error}</p>
-                <p className="mt-2 text-[11px] text-[#9CA3AF]">
-                  Make sure the server is running on port 5000 (`npm run dev` in `server/`).
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Footer info */}
-        <p className="text-xs text-[#9CA3AF]/60">
-          Present Sir &bull; Dark-Mode Keynote Aesthetic &bull; Client &amp; Server Scaffolded
-        </p>
-      </div>
+      <h1 className="text-xl font-bold text-white">{title}</h1>
+      <p className="text-sm text-[#9CA3AF]">{description}</p>
     </div>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Dashboard />} />
+            <Route path="today" element={<Today />} />
+            <Route
+              path="import"
+              element={
+                <PlaceholderPage
+                  title="Timetable & Holiday Import"
+                  description="Multimodal Gemini ingestion UI will be added in the next phase."
+                />
+              }
+            />
+            <Route
+              path="agents"
+              element={
+                <PlaceholderPage
+                  title="Agentic Co-Pilot"
+                  description="Detention Shield, Trip Strategist, Condonation & Batch Consensus UI will be added in the next phase."
+                />
+              }
+            />
+            <Route
+              path="approvals"
+              element={
+                <PlaceholderPage
+                  title="HITL Pending Approvals"
+                  description="Human-in-the-Loop approval queue will be added in the next phase."
+                />
+              }
+            />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}

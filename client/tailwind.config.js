@@ -14,6 +14,7 @@ export default {
           card: '#121418',
           surface: '#121418',
         },
+        borderSubtle: '#1F242D',
         primary: {
           DEFAULT: '#FFFFFF',
           text: '#FFFFFF',

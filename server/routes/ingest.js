@@ -4,6 +4,7 @@ import PendingAction from '../models/PendingAction.js';
 import Subject from '../models/Subject.js';
 import TimetableSlot from '../models/TimetableSlot.js';
 import Holiday from '../models/Holiday.js';
+import User from '../models/User.js';
 import { requireAuth } from '../middleware/auth.js';
 import {
   parseTimetableFiles,
@@ -33,7 +34,15 @@ router.post('/timetable', upload.array('files', 5), async (req, res) => {
       });
     }
 
-    const extracted = await parseTimetableFiles(req.files);
+    const user = await User.findById(req.userId).select('department semester section');
+    const studentContext = {
+      department: req.body?.department || user?.department || '',
+      semester: req.body?.semester || user?.semester || '',
+      section: req.body?.section || user?.section || '',
+      filterHint: req.body?.filterHint || '',
+    };
+
+    const extracted = await parseTimetableFiles(req.files, studentContext);
 
     // Human-in-the-Loop: Stage in PendingAction without directly modifying production tables
     const pendingAction = await PendingAction.create({

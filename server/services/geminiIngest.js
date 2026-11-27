@@ -16,29 +16,32 @@ const getGeminiClient = () => {
 };
 
 /**
- * Executes a Gemini API call with up to `maxRetries` (default: 5) and exponential backoff.
+ * Executes a Gemini API call and retries after a 2-second delay if the error
+ * contains 503 or UNAVAILABLE.
  *
- * @param {Function} apiCall - Async function returning generateContent promise
- * @param {number} [maxRetries=5] - Number of total attempts before failing
- * @param {number} [initialDelayMs=1000] - Base delay in milliseconds
+ * @param {Function} fn - Async function returning generateContent promise
+ * @param {number} [maxRetries=5] - Maximum number of retries on 503/UNAVAILABLE
  * @returns {Promise<any>}
  */
-async function callGeminiWithRetry(apiCall, maxRetries = 5, initialDelayMs = 1000) {
+async function callGeminiWithRetry(fn, maxRetries = 5) {
   let lastError;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await apiCall();
+      return await fn();
     } catch (err) {
       lastError = err;
-      if (attempt < maxRetries) {
-        const delay = initialDelayMs * Math.pow(2, attempt - 1) + Math.random() * 500;
+      const errMsg = err?.message || String(err);
+      const isRetryable = errMsg.includes('503') || errMsg.includes('UNAVAILABLE');
+
+      if (isRetryable && attempt < maxRetries) {
         console.warn(
-          `⚠️ Gemini API call failed (attempt ${attempt}/${maxRetries}): ${err.message}. Retrying in ${Math.round(delay)}ms...`
+          `⚠️ Gemini API returned 503/UNAVAILABLE. Retrying in 1s (retry ${attempt + 1}/${maxRetries})...`
         );
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      } else {
-        console.error(`❌ Gemini API call failed after ${maxRetries} attempts:`, err.message);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        continue;
       }
+
+      throw err;
     }
   }
   throw lastError;
@@ -47,13 +50,17 @@ async function callGeminiWithRetry(apiCall, maxRetries = 5, initialDelayMs = 100
 /**
  * Extracts subjects and recurring timetable slots from one or more image/PDF buffers.
  * Passes all files together in a single Gemini call and instructs the model to merge
- * and deduplicate entries. Retries up to 5 times on transient failures.
+ * and deduplicate entries, filtered by optional studentContext.
  *
  * @param {Array<{ buffer: Buffer, mimetype?: string, mimeType?: string }>|Buffer} files
- * @param {string} [legacyMimeType] - Fallback mimeType if single buffer passed
+ * @param {Object|string} [studentContext={}] - { department, semester, section, filterHint } or legacy mimeType
  * @returns {Promise<{ subjects: Array, timetableSlots: Array }>}
  */
-export async function parseTimetableFiles(files, legacyMimeType) {
+export async function parseTimetableFiles(files, studentContext = {}) {
+  const legacyMimeType = typeof studentContext === 'string' ? studentContext : undefined;
+  const contextObj =
+    studentContext && typeof studentContext === 'object' ? studentContext : {};
+
   const fileList = Array.isArray(files)
     ? files
     : [{ buffer: files, mimeType: legacyMimeType || 'image/png' }];
@@ -72,9 +79,21 @@ export async function parseTimetableFiles(files, legacyMimeType) {
     },
   }));
 
+  const {
+    department = '',
+    semester = '',
+    section = '',
+    filterHint = '',
+  } = contextObj;
+
+  const hasContext = Boolean(department || semester || section || filterHint);
+  const filterSection = hasContext
+    ? `\nThe uploaded timetable may contain multiple branches, departments, semesters, or sections. Extract ONLY the subjects and timetableSlots belonging to: Department: ${department || 'Not specified'}, Semester: ${semester || 'Not specified'}, Section: ${section || 'Not specified'}, Additional Filter: ${filterHint || 'None'}. Completely ignore all other branches, sections, and rooms.\n`
+    : '';
+
   const prompt = `You are an expert academic schedule parser.
 Analyze all attached timetable documents (images and/or PDFs) and extract a single, merged, and deduplicated academic schedule.
-
+${filterSection}
 Rules:
 1. Merge schedules across all uploaded documents into one comprehensive timetable. If identical subjects or timetable slots appear across multiple files, deduplicate them so each slot appears only once.
 2. Day of week must be an integer: 0 for Sunday, 1 for Monday, 2 for Tuesday, 3 for Wednesday, 4 for Thursday, 5 for Friday, 6 for Saturday.
@@ -140,7 +159,7 @@ export const parseTimetableFile = parseTimetableFiles;
 /**
  * Extracts official holidays from one or more calendar/holiday documents.
  * Merges and deduplicates holiday dates across all uploaded files.
- * Retries up to 5 times on transient failures.
+ * Retries after 2s on 503/UNAVAILABLE errors.
  *
  * @param {Array<{ buffer: Buffer, mimetype?: string, mimeType?: string }>|Buffer} files
  * @param {string} [legacyMimeType] - Fallback mimeType if single buffer passed
